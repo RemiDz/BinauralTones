@@ -1,9 +1,12 @@
 :root { 
+  color-scheme: light dark;
   --bg:#f8fafc; 
   --fg:#0f1220; 
   --muted:#64748b; 
   --panel-bg: rgba(248,250,252,0.85);
   --panel-border: rgba(2,6,23,0.08);
+  --control-bg:#ffffff;
+  --control-fg:#111827;
 }
 body[data-theme="dark"] {
   --bg:#0f1220; 
@@ -11,6 +14,8 @@ body[data-theme="dark"] {
   --muted:#9aa1b2;
   --panel-bg: rgba(15,18,32,0.75);
   --panel-border: rgba(147,112,219,0.25);
+  --control-bg:#111827;
+  --control-fg:#e7e9ee;
 }
 * { box-sizing: border-box; }
 body { margin:0; font-family: ui-sans-serif,system-ui,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--fg); }
@@ -45,6 +50,26 @@ h1 { font-size: clamp(18px, 3vw, 28px); margin:0; }
 .vibrato label { font-weight:700; font-size:12px; color:var(--muted); }
 .vibrato input[type="range"] { width:160px; accent-color:#8b5cf6; }
 .vibrato span { font-size:12px; color:#c6d3ff; }
+/* Presets & Synthesis panels */
+.presets, .synthesis, .noise { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:8px; }
+.panel .group select, .panel .group input[type="number"] { padding:8px; border-radius:8px; border:1px solid var(--panel-border); background:transparent; color:var(--fg); }
+.panel .group select, .panel .group input[type="number"] {
+  background: var(--control-bg);
+  color: var(--control-fg);
+  -webkit-appearance: none;
+  appearance: none;
+  caret-color: var(--control-fg);
+}
+.panel .group select:focus, .panel .group input[type="number"]:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+/* Help native form controls choose correct system palette */
+select, input, button { color-scheme: light dark; }
+/* Visible text selection */
+::selection { background: rgba(147,112,219,0.35); color: #ffffff; }
+.panel .group input[type="range"] { width:180px; accent-color:#8b5cf6; }
+.panel .group button { background: linear-gradient(180deg,#e5e7eb,#d1d5db); color:#111827; }
 button {
   border:none; cursor:pointer; padding:10px 16px; border-radius:12px; font-weight:700;
   color:#04130a; box-shadow: 0 6px 18px rgba(0,0,0,.25);
@@ -99,7 +124,12 @@ button .ripple {
 @keyframes ripple { to { transform: scale(8); opacity: 0; } }
 .grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; align-items:center; }
 @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
-.wheel { width:min(90vw,480px); aspect-ratio:1/1; position:relative; user-select:none; touch-action:none; }
+.wheel { width:min(90vw,480px); aspect-ratio:1/1; position:relative; user-select:none; -webkit-user-select:none; -ms-user-select:none; -webkit-touch-callout:none; touch-action:none; }
+.wheel, .wheel * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
+.wheel .labels, .wheel .pointer, .wheel .inner-pointer, .wheel .inner-circle, .wheel .rotor {
+  -webkit-user-select: none;
+  user-select: none;
+}
 .rotor, .overlay { position:absolute; inset:0; border-radius:50%; }
 .rotor { 
   background:
@@ -413,12 +443,15 @@ button .ripple {
 @media (max-width: 900px) and (orientation: landscape) {
   .grid { grid-template-columns: 1fr 1fr; }
   .wheel { width: min(45vw, 360px); }
-  header { align-items: center; flex-wrap: wrap; }
+  header { align-items: center; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 10px; }
+  header .brand, header .panel, header .controls { flex: 0 0 auto; }
 }
 
 /* Very short landscape heights: slightly smaller wheels to avoid overflow */
 @media (orientation: landscape) and (max-height: 420px) {
   .wheel { width: min(42vw, 300px); }
+  header { overflow-x: auto; flex-wrap: nowrap; }
+  header .panel { min-width: 260px; }
 }
 
 /* Large screens: give more breathing room and allow larger wheels */
