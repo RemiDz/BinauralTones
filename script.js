@@ -79,6 +79,22 @@
 
     tag.textContent = (root.id === 'wheelL') ? 'Left Channel' : 'Right Channel';
 
+    // iOS Safari: prevent text selection/copy UI while dragging
+    root.addEventListener('touchstart', (e) => {
+      if (e.target && (e.target.closest('.wheel'))) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+    root.addEventListener('selectstart', (e) => {
+      e.preventDefault();
+    });
+    root.addEventListener('gesturestart', (e) => {
+      e.preventDefault();
+    });
+    root.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
     // place 9 label positions around the circle with sorted frequencies (lowest at 12 o'clock)
     function layoutLabels() {
       labels.innerHTML = '';
@@ -306,6 +322,32 @@
       return { frequency: freq, index: indexA };
     }
 
+    // Inverse mapping: frequency -> wheel angle
+    function mapFrequencyToAngle(freqHz) {
+      const stepAngle = 360 / SORTED_FREQUENCIES.length;
+      const clamped = Math.min(MAX_FREQUENCY_HZ, Math.max(0, Number(freqHz) || 0));
+      if (clamped === 0) return calculateZeroPositionAngle();
+      for (let indexA = 0; indexA < SORTED_FREQUENCIES.length; indexA++) {
+        const indexB = (indexA + 1) % SORTED_FREQUENCIES.length;
+        const fA = SORTED_FREQUENCIES[indexA];
+        const fB = SORTED_FREQUENCIES[indexB];
+        if (indexB === 0 && fA >= 900) {
+          const endCap = 1000;
+          if (clamped >= fA && clamped <= endCap) {
+            const ratio = (clamped - fA) / (endCap - fA || 1);
+            return indexA * stepAngle + ratio * stepAngle;
+          }
+        } else {
+          if (clamped >= fA && clamped <= fB) {
+            const ratio = (clamped - fA) / (fB - fA || 1);
+            return indexA * stepAngle + ratio * stepAngle;
+          }
+        }
+      }
+      if (clamped < SORTED_FREQUENCIES[0]) return 0;
+      return 359.999;
+    }
+
     function applyRotation() {
       // Rotate the main pointer based on visual angle
       const visualAngle = ((pointerAngleVisual % 360) + 360) % 360;
@@ -446,6 +488,15 @@
     return {
       getHz: () => currentTopHz(),
       setOnChange: fn => (onchange = fn),
+      setHz: (hz) => {
+        const target = Math.min(MAX_FREQUENCY_HZ, Math.max(0, Number(hz) || 0));
+        innerPointerRotation = 0;
+        decimalOffset = 0;
+        pointerAngleVisual = mapFrequencyToAngle(target);
+        continuousFrequency = target;
+        applyRotation();
+        onchange?.(currentTopHz());
+      },
       reset: () => {
         // Reset to lowest frequency in array
         continuousFrequency = SORTED_FREQUENCIES[0] ?? 0.1;
@@ -466,14 +517,28 @@
   let vibLFO = null;          // oscillator used as LFO
   let vibDepthGain = null;    // gain scaling the LFO output (Hz depth)
   let vibEnabled = false;
+  // Additional synthesis controls
+  let currentWaveType = 'sine';
+  let filterEnabled = false;
+  let filterType = 'lowpass';
+  let filterCutoff = 8000;
+  let filterQ = 1;
+  // Noise
+  let noiseSource = null, noiseGain = null, noiseFilter = null;
+  let currentNoiseType = 'off';
+  let noiseLevel = 0;
   function ensureAudio(){
     if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     const make = (pan)=> {
-      const osc = audioCtx.createOscillator(); osc.type='sine';
+      const osc = audioCtx.createOscillator(); osc.type = currentWaveType;
+      const biquad = audioCtx.createBiquadFilter();
+      biquad.type = filterEnabled ? filterType : 'allpass';
+      try { biquad.frequency.value = filterCutoff; } catch {}
+      try { biquad.Q.value = filterQ; } catch {}
       const gain = audioCtx.createGain(); gain.gain.value = 0.25;
       const panner = audioCtx.createStereoPanner(); panner.pan.value = pan;
-      osc.connect(gain).connect(panner).connect(audioCtx.destination);
-      return {osc,gain,panner,started:false};
+      osc.connect(biquad).connect(gain).connect(panner).connect(audioCtx.destination);
+      return {osc,filter:biquad,gain,panner,started:false};
     };
     if (!voiceL) voiceL = make(-1);
     if (!voiceR) voiceR = make( +1);
@@ -492,6 +557,8 @@
       vibDepthGain.connect(voiceL.osc.frequency);
       vibDepthGain.connect(voiceR.osc.frequency);
     }
+
+    ensureNoise();
   }
   function startAudio(){
     ensureAudio();
@@ -513,6 +580,9 @@
         vibDepthGain = null;
       } catch {}
     }
+    // Stop noise
+    try { noiseSource?.stop(); } catch {}
+    noiseSource = null;
     setTransportActive('stop');
   }
   function setFreq(osc, hz){
@@ -660,6 +730,139 @@
 
   // Initialize displayed values
   refreshVibratoUI();
+
+  // Presets: Frequency Library
+  const freqLibraryEl = document.getElementById('freqLibrary');
+  const freqApplyBtn = document.getElementById('freqApply');
+  if (freqLibraryEl) {
+    const frag = document.createDocumentFragment();
+    SORTED_FREQUENCIES.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = String(f);
+      const name = GALAXY_COLORS[f]?.name;
+      opt.textContent = name ? `${f} Hz — ${name}` : `${f} Hz`;
+      frag.appendChild(opt);
+    });
+    freqLibraryEl.appendChild(frag);
+  }
+  freqApplyBtn?.addEventListener('click', () => {
+    const val = Number(freqLibraryEl?.value || '0');
+    if (!Number.isFinite(val)) return;
+    wheelL.setHz(val);
+    wheelR.setHz(val);
+    updateOscillators();
+  });
+
+  // Binaural Category presets
+  const bbCategoryEl = document.getElementById('bbCategory');
+  const bbCarrierEl = document.getElementById('bbCarrier');
+  const bbApplyBtn = document.getElementById('bbApply');
+  bbApplyBtn?.addEventListener('click', () => {
+    const beat = Number(bbCategoryEl?.value || '0');
+    if (!Number.isFinite(beat) || beat <= 0) return;
+    let carrier = Number(bbCarrierEl?.value || '200');
+    if (!Number.isFinite(carrier)) carrier = 200;
+    carrier = Math.min(MAX_FREQUENCY_HZ - beat/2, Math.max(beat/2, carrier));
+    const leftHz = Math.max(0, carrier - beat/2);
+    const rightHz = Math.min(MAX_FREQUENCY_HZ, carrier + beat/2);
+    wheelL.setHz(leftHz);
+    wheelR.setHz(rightHz);
+    updateOscillators();
+  });
+
+  // Wave type
+  const waveTypeEl = document.getElementById('waveType');
+  waveTypeEl?.addEventListener('change', () => {
+    currentWaveType = waveTypeEl.value || 'sine';
+    ensureAudio();
+    if (voiceL?.osc) voiceL.osc.type = currentWaveType;
+    if (voiceR?.osc) voiceR.osc.type = currentWaveType;
+  });
+
+  // Filter controls
+  const filterEnableEl = document.getElementById('filterEnable');
+  const filterTypeEl = document.getElementById('filterType');
+  const filterCutoffEl = document.getElementById('filterCutoff');
+  const filterCutoffVal = document.getElementById('filterCutoffVal');
+  const filterQEl = document.getElementById('filterQ');
+  const filterQVal = document.getElementById('filterQVal');
+
+  function refreshFilterUI(){
+    if (filterCutoffVal) filterCutoffVal.textContent = `${Number(filterCutoffEl?.value || 0).toFixed(0)} Hz`;
+    if (filterQVal) filterQVal.textContent = `${Number(filterQEl?.value || 0).toFixed(2)}`;
+  }
+  function applyFilter(){
+    ensureAudio();
+    if (voiceL?.filter) {
+      voiceL.filter.type = filterEnabled ? filterType : 'allpass';
+      try { voiceL.filter.frequency.setTargetAtTime(filterCutoff, audioCtx.currentTime, 0.05); } catch { voiceL.filter.frequency.value = filterCutoff; }
+      try { voiceL.filter.Q.setTargetAtTime(filterQ, audioCtx.currentTime, 0.05); } catch { voiceL.filter.Q.value = filterQ; }
+    }
+    if (voiceR?.filter) {
+      voiceR.filter.type = filterEnabled ? filterType : 'allpass';
+      try { voiceR.filter.frequency.setTargetAtTime(filterCutoff, audioCtx.currentTime, 0.05); } catch { voiceR.filter.frequency.value = filterCutoff; }
+      try { voiceR.filter.Q.setTargetAtTime(filterQ, audioCtx.currentTime, 0.05); } catch { voiceR.filter.Q.value = filterQ; }
+    }
+  }
+  filterEnableEl?.addEventListener('change', () => { filterEnabled = !!filterEnableEl.checked; applyFilter(); });
+  filterTypeEl?.addEventListener('change', () => { filterType = filterTypeEl.value || 'lowpass'; applyFilter(); });
+  filterCutoffEl?.addEventListener('input', () => { filterCutoff = Number(filterCutoffEl.value)||8000; refreshFilterUI(); applyFilter(); });
+  filterQEl?.addEventListener('input', () => { filterQ = Number(filterQEl.value)||1; refreshFilterUI(); applyFilter(); });
+  refreshFilterUI();
+
+  // Noise controls
+  const noiseTypeEl = document.getElementById('noiseType');
+  const noiseLevelEl = document.getElementById('noiseLevel');
+  const noiseLevelVal = document.getElementById('noiseLevelVal');
+
+  function refreshNoiseUI(){ if (noiseLevelVal) noiseLevelVal.textContent = `${Number(noiseLevelEl?.value || 0).toFixed(2)}`; }
+
+  function ensureNoise(){
+    if (!audioCtx) return;
+    if (!noiseGain) {
+      noiseGain = audioCtx.createGain();
+      noiseGain.gain.value = noiseLevel;
+      noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = 'allpass';
+      noiseFilter.connect(noiseGain).connect(audioCtx.destination);
+    }
+    if (!noiseSource) {
+      const buffer = createWhiteNoiseBuffer(audioCtx, 2);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer; src.loop = true; src.connect(noiseFilter);
+      try { src.start(); } catch {}
+      noiseSource = src;
+    }
+    applyNoise();
+  }
+  function createWhiteNoiseBuffer(ctx, seconds){
+    const length = Math.max(1, Math.floor((ctx.sampleRate||44100) * (seconds||2)));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<length;i++){ data[i] = Math.random()*2-1; }
+    return buffer;
+  }
+  function applyNoise(){
+    if (!audioCtx || !noiseGain || !noiseFilter) return;
+    if (noiseTypeEl) currentNoiseType = noiseTypeEl.value || 'off';
+    if (noiseLevelEl) noiseLevel = Number(noiseLevelEl.value) || 0;
+    try { noiseGain.gain.setTargetAtTime(noiseLevel, audioCtx.currentTime, 0.1); } catch { noiseGain.gain.value = noiseLevel; }
+    if (currentNoiseType === 'off') {
+      noiseGain.gain.value = 0;
+      noiseFilter.type = 'allpass';
+    } else if (currentNoiseType === 'white') {
+      noiseFilter.type = 'allpass';
+    } else if (currentNoiseType === 'pink') {
+      noiseFilter.type = 'lowshelf';
+      noiseFilter.frequency.value = 500; noiseFilter.gain.value = 6;
+    } else if (currentNoiseType === 'brown') {
+      noiseFilter.type = 'lowshelf';
+      noiseFilter.frequency.value = 500; noiseFilter.gain.value = 12;
+    }
+  }
+  noiseTypeEl?.addEventListener('change', () => { ensureAudio(); ensureNoise(); applyNoise(); });
+  noiseLevelEl?.addEventListener('input', () => { refreshNoiseUI(); ensureAudio(); ensureNoise(); applyNoise(); });
+  refreshNoiseUI();
 
   // THEME: persist light/dark and toggle
   const THEME_KEY = 'twinwheels-theme';
