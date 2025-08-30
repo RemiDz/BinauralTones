@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="format-detection" content="telephone=no, email=no, address=no" />
 <meta name="theme-color" content="#f8fafc" />
 <meta name="description" content="Binaural Twin Wheels: mobile-friendly left/right split tone generator with fine-tune and vibrato." />
 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -52,6 +53,81 @@
         <label for="vibRate">Rate</label>
         <input id="vibRate" type="range" min="0.1" max="10" step="0.1" value="5" />
         <span id="vibRateVal">5.0 Hz</span>
+      </div>
+    </div>
+
+    <div class="presets panel" aria-labelledby="presetsTitle">
+      <h2 id="presetsTitle" class="panel-title">Presets</h2>
+      <div class="group">
+        <label for="bbCategory">🧠 Binaural Category</label>
+        <select id="bbCategory">
+          <option value="none">None</option>
+          <option value="1.5">Delta (1.5 Hz)</option>
+          <option value="3">Delta (3 Hz)</option>
+          <option value="6">Theta (6 Hz)</option>
+          <option value="10">Alpha (10 Hz)</option>
+          <option value="20">Beta (20 Hz)</option>
+          <option value="40">Gamma (40 Hz)</option>
+        </select>
+        <label for="bbCarrier">Carrier</label>
+        <input id="bbCarrier" type="number" min="50" max="800" step="1" value="200" />
+        <button id="bbApply">Apply</button>
+      </div>
+
+      <div class="group">
+        <label for="freqLibrary">📚 Frequency Library</label>
+        <select id="freqLibrary"></select>
+        <button id="freqApply">Set Both</button>
+      </div>
+    </div>
+
+    <div class="synthesis panel" aria-labelledby="synthTitle">
+      <h2 id="synthTitle" class="panel-title">Synthesis</h2>
+      <div class="group">
+        <label for="waveType">Wave</label>
+        <select id="waveType">
+          <option value="sine">Sine</option>
+          <option value="triangle">Triangle</option>
+          <option value="square">Square</option>
+          <option value="sawtooth">Sawtooth</option>
+        </select>
+      </div>
+
+      <div class="group">
+        <label for="filterEnable">Filter</label>
+        <input id="filterEnable" type="checkbox" />
+        <label for="filterType">Type</label>
+        <select id="filterType">
+          <option value="lowpass">Lowpass</option>
+          <option value="highpass">Highpass</option>
+          <option value="bandpass">Bandpass</option>
+        </select>
+      </div>
+      <div class="group">
+        <label for="filterCutoff">Cutoff</label>
+        <input id="filterCutoff" type="range" min="20" max="20000" step="1" value="8000" />
+        <span id="filterCutoffVal">8000 Hz</span>
+      </div>
+      <div class="group">
+        <label for="filterQ">Q</label>
+        <input id="filterQ" type="range" min="0.0001" max="30" step="0.01" value="1" />
+        <span id="filterQVal">1.00</span>
+      </div>
+    </div>
+
+    <div class="noise panel" aria-labelledby="noiseTitle">
+      <h2 id="noiseTitle" class="panel-title">Noise</h2>
+      <div class="group">
+        <label for="noiseType">Type</label>
+        <select id="noiseType">
+          <option value="off">Off</option>
+          <option value="white">White</option>
+          <option value="pink">Pink</option>
+          <option value="brown">Brown</option>
+        </select>
+        <label for="noiseLevel">Level</label>
+        <input id="noiseLevel" type="range" min="0" max="1" step="0.01" value="0" />
+        <span id="noiseLevelVal">0.00</span>
       </div>
     </div>
   </header>
