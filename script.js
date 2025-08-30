@@ -79,9 +79,14 @@
 
     tag.textContent = (root.id === 'wheelL') ? 'Left Channel' : 'Right Channel';
 
-    // iOS Safari: prevent text selection/copy UI while dragging
+    // iOS Safari: prevent text selection/copy UI while dragging, but allow label taps
     root.addEventListener('touchstart', (e) => {
-      if (e.target && (e.target.closest('.wheel'))) {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      // Allow taps on frequency labels to generate click events
+      if (t.closest('.labels')) return;
+      // Prevent default only for drag surfaces
+      if (t.closest('.pointer') || t.closest('.inner-pointer') || t.closest('.rotor') || t.closest('.inner-circle')) {
         e.preventDefault();
       }
     }, { passive: false });
